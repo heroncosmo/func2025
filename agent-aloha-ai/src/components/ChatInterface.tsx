@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Bot, User, ArrowUp } from 'lucide-react';
+import { Send, Bot, User, ArrowLeft } from 'lucide-react';
 import { AgentData } from './AgentBuilder';
 import { useToast } from '@/hooks/use-toast';
+import baseKnowledge from '@/data/base_conhecimento_funcionario_ia.json';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface Message {
   id: string;
@@ -22,6 +26,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ agentData }) => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   // Initialize with welcome message
   useEffect(() => {
@@ -49,10 +54,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ agentData }) => {
       'vendedor': 'Seja persuasivo e focado em destacar benefícios. Conduza a conversa para fechar vendas ou agendamentos.'
     };
 
+    const businessType = baseKnowledge.tipos_negocio[agentData.businessType as keyof typeof baseKnowledge.tipos_negocio];
+    const businessConfig = businessType?.configuracao_padrao || {};
+    const businessExamples = businessType?.exemplos_uso || [];
+
     return `Você é um assistente virtual do ${agentData.businessName}.
 
 INFORMAÇÕES DO NEGÓCIO:
 ${agentData.businessInfo}
+
+CONFIGURAÇÃO PADRÃO:
+Horários: ${businessConfig.horarios || 'Não definido'}
+Serviços: ${businessConfig.servicos || 'Não definido'}
+Formas de Pagamento: ${businessConfig.pagamentos || 'Não definido'}
+${businessConfig.agendamento ? '✓ Aceita Agendamentos' : '✗ Não Aceita Agendamentos'}
+${businessConfig.delivery ? '✓ Faz Delivery' : '✗ Não Faz Delivery'}
+
+EXEMPLOS DE USO:
+${businessExamples.map(ex => `- ${ex}`).join('\n')}
 
 PERSONALIDADE:
 ${personalityMap[agentData.personality as keyof typeof personalityMap]}
@@ -68,12 +87,13 @@ INSTRUÇÕES:
 Responda de forma natural e conversacional.`;
   };
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim()) return;
+  const sendMessage = async (messageContent?: string) => {
+    const content = messageContent || inputMessage;
+    if (!content.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: inputMessage.trim(),
+      content: content.trim(),
       sender: 'user',
       timestamp: new Date()
     };
@@ -99,7 +119,7 @@ Responda de forma natural e conversacional.`;
           messages: [
             { role: 'system', content: buildSystemPrompt() },
             ...conversationHistory,
-            { role: 'user', content: inputMessage.trim() }
+            { role: 'user', content: content.trim() }
           ],
           max_tokens: 1000,
           temperature: 0.7
@@ -150,6 +170,27 @@ Responda de forma natural e conversacional.`;
     }
   };
 
+  const onBack = () => {
+    // Implement the back functionality
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    switch (suggestion) {
+      case "Configurar meu negócio":
+        sendMessage("Quero configurar o meu negócio.");
+        break;
+      case "Testar o simulador":
+        sendMessage("Gostaria de testar o simulador.");
+        break;
+      case "Conectar ao WhatsApp":
+        window.dispatchEvent(new CustomEvent('open-whatsapp-modal'));
+        break;
+      case "Ver planos":
+        window.dispatchEvent(new CustomEvent('open-upgrade-modal'));
+        break;
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Área de Mensagens - Minimalista */}
@@ -158,12 +199,15 @@ Responda de forma natural e conversacional.`;
           /* Estado Inicial - Foco no Input */
           <div className="h-full flex flex-col items-center justify-center px-4">
             <div className="max-w-2xl w-full text-center mb-8">
-              <h1 className="text-3xl font-light text-gray-800 mb-2">
-                {agentData.businessName || 'FuncionarioPro'}
-              </h1>
-              <p className="text-gray-500 text-base">
-                Como posso ajudá-lo hoje?
-              </p>
+              <div className="flex items-center gap-3 justify-center">
+                <Avatar className="h-12 w-12 border">
+                  <AvatarImage src={agentData.logo || '/placeholder.svg'} alt={agentData.businessName} />
+                  <AvatarFallback>{agentData.businessName ? agentData.businessName.charAt(0) : 'A'}</AvatarFallback>
+                </Avatar>
+                <h1 className="text-2xl font-semibold text-gray-900">
+                  Como posso te ajudar hoje?
+                </h1>
+              </div>
             </div>
           </div>
         ) : (
@@ -216,44 +260,62 @@ Responda de forma natural e conversacional.`;
                 </div>
               </div>
             )}
-
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
-      {/* Campo de Input - Destaque Principal */}
-      <div className="border-t border-gray-200 bg-white">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="relative">
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Envie uma mensagem..."
-              disabled={isLoading}
-              className="w-full px-4 py-3 pr-12 bg-gray-50 border border-gray-200 rounded-full 
-                         text-base text-gray-900 placeholder-gray-500
-                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent
-                         disabled:opacity-50 disabled:cursor-not-allowed
-                         transition-all duration-200"
-              style={{ 
-                fontSize: '16px',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-              }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={isLoading || !inputMessage.trim()}
-              className="absolute right-2 top-1/2 -translate-y-1/2 
-                         w-8 h-8 bg-gray-800 rounded-full 
-                         flex items-center justify-center
-                         hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed
-                         transition-all duration-200"
-            >
-              <ArrowUp className="h-4 w-4 text-white" />
-            </button>
+      {/* Área de Input - Foco e Minimalismo */}
+      <div className="p-4 bg-white border-t">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex flex-col gap-2">
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Digite sua mensagem aqui..."
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="w-full pl-4 pr-12 py-3 h-14 text-base rounded-lg bg-gray-50 border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                disabled={isLoading}
+              />
+              <Button
+                size="icon"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full h-9 w-9 bg-blue-600 hover:bg-blue-700"
+                onClick={() => sendMessage()}
+                disabled={isLoading || !inputMessage.trim()}
+              >
+                <Send className="h-5 w-5 text-white" />
+              </Button>
+            </div>
+            
+            {/* Sugestões de Ação - Sempre visíveis */}
+            <div className="flex flex-wrap gap-2 px-1">
+              <button
+                onClick={() => handleSuggestionClick("Configurar meu negócio")}
+                className="text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md px-3 py-1.5 transition-colors"
+              >
+                Configurar meu negócio
+              </button>
+              <button
+                onClick={() => handleSuggestionClick("Testar o simulador")}
+                className="text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md px-3 py-1.5 transition-colors"
+              >
+                Testar o simulador
+              </button>
+              <button
+                onClick={() => handleSuggestionClick("Conectar ao WhatsApp")}
+                className="text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md px-3 py-1.5 transition-colors"
+              >
+                Conectar ao WhatsApp
+              </button>
+              <button
+                onClick={() => handleSuggestionClick("Ver planos")}
+                className="text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md px-3 py-1.5 transition-colors"
+              >
+                Ver planos
+              </button>
+            </div>
           </div>
         </div>
       </div>
